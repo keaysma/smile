@@ -3,11 +3,16 @@ import Cookies from 'js-cookie';
 //import arro from './arro.png';
 import './App.css';
 
+//TODO: Message sound
+//TODO: Scroll to bottom button
+
 const SERVERS = [
 	"108.18.248.41",
 	//Can I search the local network for smile servers?
 	"192.168.1.242",
+	"192.168.1.190",
 	"192.168.1.24",
+	//Just for me lol
 	"localhost",
 ];
 
@@ -17,6 +22,7 @@ class App extends React.Component{
 		this.state = {
 				conn : null,
 				connection : 0,
+				error: "",
 			   	username : Cookies.get('username'),
 				pw : undefined,
 				sessid : Cookies.get('sessid'),
@@ -29,15 +35,17 @@ class App extends React.Component{
 		this.wsOnMessage = this.wsOnMessage.bind(this);
 
 		this.setUsername = this.setUsername.bind(this);
+		this.getServer = this.getServer.bind(this);
 		this.startSmile = this.startSmile.bind(this);
 		this.WSSend = this.WSSend.bind(this);
+		this.scrollToBottom = this.scrollToBottom.bind(this);
 	}
 
 	componentDidMount(){
-		if(this.state.sessid !== undefined){
-			this.setState({connection : 1});
+		if(this.state.sessid !== undefined && this.state.sessid !== ""){
 			this.startSmile();
 		}else{
+			this.setState({error: ""});
 			this.setState({connection : -2});
 		}
 	}
@@ -45,30 +53,47 @@ class App extends React.Component{
 	wsOnConnect = (event) => {
 		console.log("Connected");
 		this.setState({connection: 1});
-		if(this.state.sessid === undefined || this.state.pw !== undefined){
+		if(this.state.pw !== undefined){
 			console.log("password validation");
 			this._conn.send(JSON.stringify({
 					"type": "sessionRequest", 
 					"username": this.state.username,
 					"password" : this.state.pw,
 			}));
-		}else{
+		}else if(this.state.sessid !== undefined && this.state.sessid !== ""){
+			console.log(`sending sessid: ${this.state.sessid}`);
 			this._conn.send(JSON.stringify({
 					"type": "sessionRequest",
 					"username": this.state.username,
 					"existingSession": this.state.sessid,
 			}));
+		}else{
+			this.setState({error: "Please login"});
+			this.setState({connection: -2});
 		}
 	}
 
 	wsOnDisconnect = (event) => {
-		console.log("Disconnected");
-		this.setState({connection: -2});
+		console.log(event);
+		var blame = "";
+		switch(event.code){
+			case 4001: {
+				blame = "Bad sessid";
+				Cookies.remove("sessid");
+			}
+		}
+		this.setState({
+				connection: -2,
+				error: `Disconnected: ${blame}`
+		});
 	}
 
 	wsOnError = (event) => {
-		console.log("Failed to connect");
-		this.setState({connection: -1});
+		console.log(event.text);
+		this.setState({
+				connection: -2,
+				error: "An error occured :("
+		});
 	}
 
 	wsOnMessage = (event) => {
@@ -83,6 +108,12 @@ class App extends React.Component{
 		}
 					
 		switch(message.type){
+			case "acknowledge": {
+				//for acknowledging messages recieved
+				//clear message bar here so that you don't loose
+				//your message if the connection goes back
+				break;
+			}
 			case "sessid": {
 				var sessid = message["data"];
 				this.setState({sessid : sessid});
@@ -94,7 +125,19 @@ class App extends React.Component{
 			case "message": {
 				newMessages = this.state.messages;
 				messageKey = newMessages.length.toString();
-				newMessages.push(<p key={messageKey}>{message["username"]}: {message["data"]}</p>);
+				var isMyMessage = message["username"] === this.state.username;
+				var displayId = isMyMessage ? "mine" : "foreign";
+				var time = "time"  in message ? message["time"] : "";
+				newMessages.push(
+					<div id="msgContainer">
+						<p key={messageKey} id={displayId}>
+							{message["username"]}: {message["data"]}
+							<p id="time">
+								{time}
+							</p>
+						</p>
+					</div>
+				);
 				break;
 			}	
 			case "history": {
@@ -103,11 +146,23 @@ class App extends React.Component{
 				history.forEach((message, i) => {
 					switch(message["type"]){
 						case "message" : {
-							newMessages.push(<p key={i.toString()}>{message["username"]}: {message["data"]}</p>);
+							var isMyMessage = message["username"] === this.state.username;
+							var displayId = isMyMessage ? "mine" : "foreign";
+							var time = "time"  in message ? message["time"] : "";
+							newMessages.push(
+								<div id="msgContainer">
+									<p key={i.toString()} id={displayId}>
+										{message["username"]}: {message["data"]}
+										<p id="time">
+											{time}
+										</p>
+									</p>
+								</div>
+							);
 							break;
 						}
 						case "broadcast" : {
-							newMessages.push(<p key={i.toString()}>{message["data"]}</p>);
+							newMessages.push(<p key={i.toString()} id="broadcast">{message["data"]}</p>);
 							break;
 						}
 						default: {}
@@ -118,7 +173,7 @@ class App extends React.Component{
 			case "broadcast": {
 				newMessages = this.state.messages;
 				messageKey = newMessages.length.toString();
-				newMessages.push(<p key={messageKey}>{message["data"]}</p>);
+				newMessages.push(<p key={messageKey} id="broadcast">{message["data"]}</p>);
 				break;
 			}
 			default: {
@@ -144,6 +199,15 @@ class App extends React.Component{
 		}
 	}
 
+	scrollToBottom = () => {
+		var scrollSpace = document.getElementById("msgs")
+		var atScrollBottom = true;
+		if(scrollSpace !== null){
+			atScrollBottom = scrollSpace.scrollHeight === (scrollSpace.clientHeight + scrollSpace.scrollTop)
+			scrollSpace.scrollTop = scrollSpace.scrollHeight;
+		}
+	}
+
 	setUsername = () => {
 		var _username = document.getElementById("username").value;
 		var _pw = document.getElementById("pw").value;
@@ -153,42 +217,58 @@ class App extends React.Component{
 		this.startSmile();
 	}
 
+	//"Why would yo-": https://stackoverflow.com/questions/39940152/get-first-fulfilled-promise
 	touchServer = (server) => {
 		console.log(`Resolving: ${server}`);
 		return new Promise((resolve, reject) =>{
 			var conn = new WebSocket(server);
 			console.log("attempting...");
-			conn.onopen = () => {console.log("conn");resolve("1");};
+			conn.onopen = () => {reject(conn);};
 			conn.onerror = () => {resolve(null);};
 		});
 	}
 
-	startSmile = () => {
-		var lastServer = Cookies.get("lastServer");
+	getServer = async () => {
+		var lastServer = await Cookies.get("lastServer");
 		if(lastServer !== undefined){
 			console.log(`Connecting back to ${lastServer}`);
-			this._conn = new WebSocket(`ws://${lastServer}:9191`);
+			return new WebSocket(`ws://${lastServer}:9191`);
 		}
 		if(lastServer === undefined || this._conn.readyState === WebSocket.CLOSED){
-			/*try{
-				SERVERS.forEach((server) => {
-					this._conn = new WebSocket(`ws://${server}:9191`);
-					if(this._conn.readyState === WebSocket.OPEN)
-							Cookies.set("lastServer", server);
-							throw `Connected to ${server}`;
-				});
-			}catch(e){console.log(e);}*/
+			//maybe await?
 			var attempts = SERVERS.map(async (server) => {
 				return this.touchServer(`ws://${server}:9191`);
 			});
 
-			var connections = Promise.all(attempts).then((x) => {console.log(x);});
-			console.log(connections);
+			var connection = await Promise.all(attempts).then(
+				allFailed => {return null;},
+				successful => {return successful;}
+			);
+			return connection;
 		}
-		//this._conn.onopen = this.wsOnConnect;
-		//this._conn.onclose = this.wsOnDisconnect;
-		//this._conn.onerror = this.wsOnError;
-		//this._conn.onmessage = this.wsOnMessage;
+	}
+
+	startSmile = async () => {
+		this.setState({connection: 1});
+		if(this._conn === undefined || this._conn === null || this._conn.readyState === WebSocket.CLOSED){
+			this._conn = await this.getServer();
+			if(this._conn !== null){
+				//this.setState({connection: 2});
+				this._conn.onopen = this.wsOnConnect;
+				this._conn.onclose = this.wsOnDisconnect;
+				this._conn.onerror = this.wsOnError;
+				this._conn.onmessage = this.wsOnMessage;
+				console.log("Sending login protocol");
+				this._conn.onopen();
+			}else{
+				this.setState({
+					connection: -2,
+					error: "Could not connect"
+				});
+			}
+		}else{
+			this._conn.onopen();
+		}
 	}
 
 	render(){
@@ -204,10 +284,11 @@ class App extends React.Component{
 					<div id="msgSpc">
 						{this.state.connection === -2 &&
 							<div id="lgn">
-								<p id="lgnTxt">Please log in: </p>
+								<p id="lgnTxt">Welcome to Smile</p>
+								<p id="errTxt">{this.state.error}</p>
 								<input type="text" id="username" placeholder="username"></input>
 								<input type="password" id="pw" placeholder="password"></input>
-								<button id="sendLogin" onClick={this.setUsername}>set</button>
+								<button id="sendLogin" onClick={this.setUsername}>login</button>
 							</div>
 						}
 						{this.state.connection === -1 &&
@@ -222,10 +303,11 @@ class App extends React.Component{
 					</div>
 					{this.state.connection === 2 &&
 						<div id="wrtSpc">
-							<input id="msg" type="text" placeholder="(:"></input>
+							<input id="msg" type="text" placeholder="(:" onKeyDown={(e) => {if(e.key === 'Enter'){this.WSSend()}}}></input>
 							<button id="send" onClick={this.WSSend}>
 								{/*<img src={arro} alt=""/>*/}
 							</button>
+							<button id="send" onClick={this.scrollToBottom}>v</button>
 						</div>
 					}
 				</header>

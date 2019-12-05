@@ -1,4 +1,5 @@
 const fs = require("fs");
+const crypto = require("crypto-js");
 const WebSocket = require("ws");
 const wss = new WebSocket.Server({ 
 		port : 9191,
@@ -15,11 +16,17 @@ var accounts = {
 		"sessid": null,
 	}
 };
+
+let CLOSE = {
+		"badsession": 4001
+};
+
 var get_sessid = (() => {
 	var current_sessid = 0;
 	return () => {
 		current_sessid += 1;
-		return current_sessid;
+		var new_sessid = current_sessid;
+		return crypto.SHA512(new_sessid.toString()).toString();
 	}
 })();
 
@@ -44,15 +51,19 @@ wss.on('connection', (ws, req) => {
 								var sessinfo = sessmap[payload["sessid"]];
 								if(sessinfo["sess"] === headers){
 									if(payload["data"].length > 0){
+										var timestamp = new Date();
 										var message = {
 											"type": "message",
 											"username": sessinfo["username"],
 											"data": payload["data"],
+											"time": timestamp,
 										};
 										sendAll(message);
 									}
 								}else{
 									console.log("BAD MESSAGE: Valid session, invalid connection");
+									//TODO: Should instead send a kill packet
+									ws.close();
 								}
 							}else{
 								console.log("BAD MESSAGE: INVALID SESSID");
@@ -91,13 +102,14 @@ let createSession = (ws, headers, payload) => {
 				createValidSession(ws, headers, sessid);
 			}else{
 				console.log("BAD SESSION");
-				ws.close();
+				ws.close(CLOSE["badsession"]);
 			}
 		}else if("username" in payload && "password" in payload){
 			console.log("VALIDATING NEW SESSION");
 			var username = payload["username"];
-			var password = payload["password"];
 			if(username in accounts){
+				var password = payload["password"];
+				password = crypto.SHA512(password.toString()).toString();
 				if(accounts[username]["password"] === password){
 					var new_session = get_sessid()
 					sessmap[new_session] = {"username": username, "sess": headers};
@@ -105,7 +117,7 @@ let createSession = (ws, headers, payload) => {
 					sendAll({
 						"type": "broadcast",
 						"data": sessmap[new_session]["username"] + " has joined",
-					});
+					}, false);
 				}else{
 					console.log("BAD PW");
 					ws.close();
@@ -140,8 +152,9 @@ let createValidSession = (ws, headers, sessid) => {
 	}));
 };
 
-let sendAll = (data) => {
-	messages = [ ...messages, data ];
+let sendAll = (data, keep = true) => {
+	if(keep)
+		messages = [ ...messages, data ];
 	clients.forEach((client) => {
 		if(client.readyState == WebSocket.OPEN){
 			client.send(JSON.stringify(data));

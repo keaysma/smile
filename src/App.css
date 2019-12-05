@@ -7,7 +7,12 @@
 }
 
 .App-header {
-  background: linear-gradient(120deg, mediumseagreen, skyblue);
+  /*background: linear-gradient(120deg, mediumseagreen, skyblue);*/
+  background: 
+  	linear-gradient(45deg, hsla(220, 95%, 50%, 1) 0%, hsla(352, 96%, 45%, 0) 70%), 
+	linear-gradient(135deg, hsla(240, 85%, 40%, 0.45) 10%, hsla(253, 95%, 42%, 0) 80%), 
+	linear-gradient(225deg, hsla(179, 91%, 45%, 1) 10%, hsla(179, 91%, 45%, 0) 80%), 
+	linear-gradient(315deg, hsla(119, 96%, 49%, 1) 100%, hsla(119, 96%, 49%, 0) 70%);
   min-height: 100vh;
   display: flex;
   flex-direction: column;
@@ -50,7 +55,12 @@
 	box-shadow: #2996 1px 1px 2px;
 }
 
+#msgSpc>p{
+	color: black;
+}
+
 #msgs{
+	/*overflow-x: hidden;*/
 	overflow-y: scroll;
 	width: 97%;
 	height: 100%;
@@ -59,9 +69,46 @@
 	color: black;
 }
 
-#msgs>p{
+#msgContainer{
+	width: 100%;
+	overflow: hidden;
+}
+
+#time{
+	font-size: 0.75rem;
+	color: gray;
+	padding: 0;
+	margin: 0;
+}
+
+#broadcast{
+	width: 90%;	
+}
+
+#mine{
 	text-align: left;
-	padding: 0 10px;
+	width: 70%;
+	padding: 2% 3%;
+	float: right;
+	color: white;
+	background: mediumaquamarine;
+}
+
+#foreign{
+	text-align: left;
+	width: 70%;
+	padding: 3% 3%;
+	float: left;
+	color: white;
+	background: skyblue;
+}
+
+
+#msgContainer>p{
+	overflow-wrap: break-word;
+	overflow: hidden;
+	border: none;
+	border-radius: 10px;
 }
 
 #msgs::-webkit-scrollbar {
@@ -97,7 +144,12 @@
 
 #lgnTxt{
 	color: mediumaquamarine;
-	margin: 30px 0;
+	margin: 25px 0 0 0;
+}
+
+#errTxt{
+	color: red;
+	margin: 20px 0 10px 0;
 }
 
 #username, #pw, #sendLogin{
